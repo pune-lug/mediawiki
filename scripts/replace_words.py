@@ -4,11 +4,9 @@
 import sys
 sys.path.append('mediawiki/lib')
 import mediawiki
-from pprint import pprint
 import re
 import argparse
 import json
-import getpass
 
 def ignore_page(p):
     if p.startswith('सदस्य:') or p.startswith('साचा:') or p.startswith('वर्ग:') or p.startswith('सदस्य चर्चा:') or p.startswith('सहाय्य:') or p.startswith('विकिपीडिया:'):
@@ -22,20 +20,14 @@ def update_data(text):
         text = re.sub(x, replace_regex[x], text)
     return text
 
+
 def generate_regex(a):
-    b = []
-    for x in a:
-        for t in fix:
-            flag = False
-            if x in fix[t]:
-                b.append('(?:'+'|'.join(list(fix[t]))+')')
-                flag = True
-                break
-        if not flag:
-            b.append(x)
-    c = ''.join(b)
+    c = a
+    a = re.sub('[\u093f\u0940]', '(?:\u093f|\u0940)', a)
+    a = re.sub('[\u0941\u0942]', '(?:\u0941|\u0942)', a)
+    a = re.sub('[\u0907\u0908]', '(?:\u0907|\u0908)', a)
+    a = re.sub('[\u0909\u090a]', '(?:\u0909|\u090a)', a)
     if a != c:
-        #c = '\\b'+c+'\\b'
         c = ' '+c+' '
         if c in replace_regex:
             del(replace_regex[c])
@@ -65,11 +57,6 @@ replace_words_file = args.replace_words
 
 replace_words = {}
 replace_regex = {}
-fix = {}
-fix['velanti'] = '\u093f\u0940'
-fix['ukar'] = '\u0941\u0942'
-fix['swar_e'] = '\u0907\u0908'
-fix['swar_u'] = '\u0909\u090a'
 ignore_words_regex = set()
 
 
@@ -77,17 +64,6 @@ ignore_words_regex = set()
 if not correct_words_file and not replace_words_file:
     print('No data available for correction')
     sys.exit(1)
-
-if correct_words_file:
-    for l in open(correct_words_file, encoding='utf-8'):
-        if l.strip() not in ignore_words_regex:
-            generate_regex(l.strip())
-
-if replace_words_file:
-    for l in open(replace_words_file, encoding='utf-8'):
-        t = json.loads(l)
-        for k in t:
-            replace_words[k] = t[k]
 
 
 site = mediawiki.Site(site_url)
@@ -103,8 +79,30 @@ except Exception as e:
     sys.exit(1)
 p = mediawiki.Page(site=site)
 
-tot_edits = 0
+if correct_words_file:
+    if correct_words_file.startswith('WPUSERPAGE:'):
+        p.set_title("सदस्य:"+user+"/"+correct_words_file.split('WPUSERPAGE:')[1])
+        p.get()
+        data = p.text
+    else:
+        data = open(correct_words_file, encoding='utf-8')
+    for l in data:
+        if l.strip() not in ignore_words_regex:
+            generate_regex(l.strip())
 
+if replace_words_file:
+    if replace_words_file.startswith('WPUSERPAGE:'):
+        p.set_title("सदस्य:"+user+"/"+replace_words_file.split('WPUSERPAGE:')[1])
+        p.get()
+        data = p.text.split('\n')
+    else:
+        data = open(replace_words_file, encoding='utf-8')
+    for l in data:
+        t = json.loads(l)
+        for k in t:
+            replace_words[k] = t[k]
+
+tot_edits = 0
 for n in sorted(replace_words.keys()) + sorted(replace_regex.values()):
     try:
         print(n)
@@ -136,8 +134,8 @@ for n in sorted(replace_words.keys()) + sorted(replace_regex.values()):
         except Exception as e:
             print(e)
             sys.exit()
-    
-    
+
+
 
 print('Total edits', tot_edits)
 try:
